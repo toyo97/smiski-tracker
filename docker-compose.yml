@@ -1,0 +1,9 @@
+services:
+  smiski:
+    build: .
+    container_name: smiski-landia
+    ports:
+      - "8123:8123"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
