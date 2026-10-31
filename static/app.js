@@ -253,7 +253,7 @@ function Detail({ fig, logs, wishlisted, onClose, onLog, onDelLog, onEditLog, on
       </div>
 
       ${fig.tip ? html`<div class="tipbox">
-        <${Icon} name="lightbulb" size=${14} /> <b>Tips &amp; tricks</b>
+        <${Icon} name="lightbulb" size=${14} /> <b>Tips & tricks</b>
 ${fig.tip}</div>` : null}
 
       <div class="logshead">
@@ -547,7 +547,7 @@ function FinderPage() {
       <div class="packnote">
         Likelihoods use Student-t predictive distributions from community measurements
         (${results.results.reduce((a, r) => a + r.n, 0)} data points in ${series}, ${mode}).
-        Hover a row for tips &amp; tricks.
+        Hover a row for tips & tricks.
       </div>
     </div>` : null}
 

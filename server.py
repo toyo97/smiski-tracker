@@ -43,7 +43,7 @@ def db():
 
 
 def init():
-    """Create tables and migrate the legacy single-row `collection` table."""
+    """Create tables if missing."""
     DATA.mkdir(exist_ok=True)
     conn = db()
     conn.executescript(
@@ -61,31 +61,6 @@ def init():
         );
         """
     )
-    tables = {r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    )}
-    if "collection" in tables:
-        rows = conn.execute(
-            "SELECT * FROM collection WHERE status IS NOT NULL"
-        ).fetchall()
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        for r in rows:
-            n = max(r["count"] or 1, 1)
-            for i in range(n if r["status"] == "owned" else 0):
-                cur = conn.execute(
-                    "INSERT INTO logs (key, acquired_date, note, has_photo, created_at) VALUES (?,?,?,?,?)",
-                    (r["key"], r["acquired_date"], r["note"] if i == 0 else None, 0, now),
-                )
-                # reattach the old per-figure photo to the first log
-                old_photo = PHOTO_DIR / f"{r['key']}.jpg"
-                if i == 0 and old_photo.exists():
-                    log_id = cur.lastrowid
-                    old_photo.rename(PHOTO_DIR / f"{r['key']}-{log_id}.jpg")
-                    conn.execute("UPDATE logs SET has_photo=1 WHERE id=?", (log_id,))
-            if r["status"] == "wishlist":
-                conn.execute("INSERT OR IGNORE INTO wishlist (key) VALUES (?)", (r["key"],))
-        conn.execute("DROP TABLE collection")
-        print(f"Migrated {len(rows)} legacy collection rows")
     conn.commit()
     conn.close()
 
