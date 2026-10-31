@@ -13,6 +13,7 @@ import sqlite3
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Body, UploadFile, File
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parent
@@ -281,7 +282,7 @@ app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 @app.get("/")
 def index():
-    return (ROOT / "static" / "index.html").read_bytes()
+    return FileResponse(ROOT / "static" / "index.html")
 
 
 if __name__ == "__main__":
