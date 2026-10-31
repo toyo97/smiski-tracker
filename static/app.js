@@ -18,7 +18,7 @@ function toast(msg) {
   el.textContent = msg;
   el.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("show"), 3200);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 3000);
 }
 
 /** Compress a photo client-side before upload: max 1280px, JPEG ~82%. */
@@ -42,38 +42,48 @@ async function compressImage(file, maxDim = 1280, quality = 0.82) {
   canvas.height = h;
   canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
   if (bitmap.close) bitmap.close();
-  const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", quality));
-  return { blob, w, h };
+  return new Promise((res) => canvas.toBlob(res, "image/jpeg", quality));
+}
+
+/* -------------------------------------------------------- lucide icons */
+
+const ICONS = {
+  heart: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  package: '<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  lightbulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+  maximize: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/>',
+};
+
+function Icon({ name, size = 16, class: cls = "" }) {
+  return html`<svg class="icon ${cls}" width=${size} height=${size} viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+    stroke-linejoin="round" aria-hidden="true"
+    dangerouslySetInnerHTML=${{ __html: ICONS[name] }} />`;
 }
 
 /* ----------------------------------------------------- weights privacy */
 
-function useShowWeights() {
-  const [show, setShow] = useState(localStorage.getItem("sl-weights") === "1");
-  const toggle = useCallback(() => {
-    setShow((s) => {
-      localStorage.setItem("sl-weights", s ? "0" : "1");
-      return !s;
-    });
-  }, []);
-  return [show, toggle];
-}
-
-/** Weight value that respects privacy: hidden by default, tap to reveal one. */
-function W({ v, boxed = true }) {
+/** Weight value, hidden until tapped. Only used inside the detail view. */
+function W({ v, label }) {
   const [revealed, setRevealed] = useState(false);
-  const [show] = useShowWeights();
   if (v == null) return null;
-  const icon = boxed ? "📦" : "🧽";
-  if (show || revealed) {
-    return html`<span class="weight" onClick=${(e) => { e.stopPropagation(); setRevealed(false); }}>
-      ${icon} ${v.toFixed(1)} g
-    </span>`;
-  }
-  return html`<span class="weight w-hidden" title="tap to reveal"
-    onClick=${(e) => { e.stopPropagation(); setRevealed(true); }}>
-    ${icon} •••• g
-  </span>`;
+  return html`<button class="weight ${revealed ? "" : "w-hidden"}"
+    title=${revealed ? "" : "tap to reveal"}
+    onClick=${(e) => { e.stopPropagation(); setRevealed(!revealed); }}>
+    <span class="w-label">${label}</span>
+    ${revealed ? `${v.toFixed(1)} g` : "•••• g"}
+    ${revealed ? null : html`<${Icon} name="eye" size=${13} />`}
+  </button>`;
 }
 
 /* ------------------------------------------------------------- catalog */
@@ -81,295 +91,263 @@ function W({ v, boxed = true }) {
 function useCatalog() {
   const [state, setState] = useState(null);
   useEffect(() => {
-    Promise.all([$fetch("/api/catalog"), $fetch("/api/collection"), $fetch("/api/photos")])
-      .then(([cat, col, ph]) => {
-        const collection = {};
-        for (const row of col) collection[row.key] = row;
-        setState({ ...cat, collection, photos: new Set(ph.keys) });
+    Promise.all([$fetch("/api/catalog"), $fetch("/api/collection")])
+      .then(([cat, col]) => {
+        setState({ ...cat, logs: col.logs, wishlist: new Set(col.wishlist) });
       })
       .catch((e) => setState({ error: e.message }));
   }, []);
   return [state, setState];
 }
 
+/** derived: key -> { count, logs[] } */
+function useOwned(state) {
+  return useMemo(() => {
+    const m = new Map();
+    if (state) {
+      for (const l of state.logs) {
+        if (!m.has(l.key)) m.set(l.key, []);
+        m.get(l.key).push(l);
+      }
+    }
+    return m;
+  }, [state?.logs]);
+}
+
 /* ------------------------------------------------------------- header */
 
-function Header({ route, showWeights, toggleWeights }) {
+function Header({ route }) {
   const [busy, setBusy] = useState(false);
   const go = (r) => (e) => { e.preventDefault(); location.hash = r; };
   const doSync = async () => {
     setBusy(true);
     try {
       await $fetch("/api/sync", { method: "POST" });
-      toast("Sheet re-synced ✨");
+      toast("Sheet re-synced");
       location.reload();
     } catch (e) { toast("Sync failed: " + e.message); }
     setBusy(false);
   };
   return html`<header class="topbar">
-    <div class="logo">🧏 Smiski Landia</div>
+    <div class="logo">Smiski Landia</div>
     <nav class="tabs">
-      <a href="#/" onClick=${go("#/")} class=${route === "catalog" ? "active" : ""}>Collection</a>
-      <a href="#/stats" onClick=${go("#/stats")} class=${route === "stats" ? "active" : ""}>Stats</a>
-      <a href="#/finder" onClick=${go("#/finder")} class=${route === "finder" ? "active" : ""}>🔍 Finder</a>
+      <a href="#/" onClick=${go("#/")} class=${route === "catalog" ? "active" : ""}>
+        <${Icon} name="package" size=${15} /> Collection</a>
+      <a href="#/stats" onClick=${go("#/stats")} class=${route === "stats" ? "active" : ""}>
+        <${Icon} name="chart" size=${15} /> Stats</a>
+      <a href="#/finder" onClick=${go("#/finder")} class=${route === "finder" ? "active" : ""}>
+        <${Icon} name="search" size=${15} /> Finder</a>
     </nav>
-    <button class="iconbtn" onClick=${toggleWeights} title="Toggle weight visibility">
-      ${showWeights ? "👁️ Weights shown" : "🙈 Weights hidden"}
+    <button class="iconbtn" onClick=${doSync} disabled=${busy} title="Re-sync the community sheet">
+      <${Icon} name="refresh" size=${15} class=${busy ? "spin" : ""} /> Sync sheet
     </button>
-    <button class="iconbtn" onClick=${doSync} disabled=${busy}>${busy ? "⏳" : "🔄"} Sync sheet</button>
   </header>`;
 }
 
 /* --------------------------------------------------------------- card */
 
-function Card({ fig, col, hasPhoto, onOpen, onSet, onClear }) {
-  const status = col?.status;
-  const cls = status === "owned" ? "owned" : status === "wishlist" ? "wish" : "";
-  return html`<div class="card ${cls}">
+function Card({ fig, logs, wishlisted, onOpen, onLog, onWish }) {
+  const count = logs?.length || 0;
+  return html`<div class="card ${count ? "owned" : wishlisted ? "wish" : ""}">
     <div class="imgwrap" onClick=${() => onOpen(fig)}>
       ${fig.image
         ? html`<img src="/images/${fig.image}" alt=${fig.name} loading="lazy" />`
-        : html`<span class="placeholder">🫥</span>`}
+        : html`<span class="placeholder"><${Icon} name="package" size=${40} /></span>`}
     </div>
-    <h4 onClick=${() => onOpen(fig)}>${fig.is_secret ? "✨ " : ""}${fig.name}</h4>
+    <h4 onClick=${() => onOpen(fig)}>
+      ${fig.is_secret ? html`<span class="secret-star"><${Icon} name="sparkles" size=${12} /></span> ` : ""}
+      ${fig.name}
+    </h4>
     <div class="meta">
       <span class="badge">${fig.series}</span>
-      ${col?.count > 1 ? html`<span class="badge">×${col.count}</span>` : null}
-      ${hasPhoto ? html`<span class="badge photo" title="You have a photo of this one">📷</span>` : null}
-    </div>
-    <div class="meta">
-      <${W} v=${fig.avg_boxed} boxed=${true} />
-      <${W} v=${fig.avg_unboxed} boxed=${false} />
+      ${count > 1 ? html`<span class="badge count">×${count}</span>` : null}
+      ${count ? html`<span class="badge ok"><${Icon} name="check" size=${11} /></span>` : null}
+      ${logs?.some((l) => l.has_photo) ? html`<span class="badge photo"><${Icon} name="camera" size=${11} /></span>` : null}
     </div>
     <div class="actions">
-      <button class="act ${status === "owned" ? "on-owned" : ""}" title="Owned"
-        onClick=${() => (status === "owned" ? onClear(fig.key) : onSet(fig.key, "owned"))}>
-        ${status === "owned" ? "✅" : "☑️"}
+      <button class="act heart ${wishlisted ? "active" : ""}" title="Wishlist"
+        onClick=${() => onWish(fig.key)}>
+        <${Icon} name="heart" size=${17} />
       </button>
-      <button class="act ${status === "wishlist" ? "on-wish" : ""}" title="Wishlist"
-        onClick=${() => (status === "wishlist" ? onClear(fig.key) : onSet(fig.key, "wishlist"))}>
-        ${status === "wishlist" ? "💖" : "🤍"}
+      <button class="act plus" title="Log one" onClick=${() => onLog(fig.key)}>
+        <${Icon} name="plus" size=${17} />
       </button>
     </div>
   </div>`;
 }
 
-/* ------------------------------------------------------- photo section */
+/* ------------------------------------------------------- photo control */
 
-function PhotoSection({ fig, hasPhoto, onUploaded, onDeleted }) {
-  const [preview, setPreview] = useState(null); // object URL while uploading
+function PhotoControl({ log, onChanged }) {
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
   const inputRef = useRef(null);
 
   const upload = async (file) => {
     if (!file) return;
-    setBusy(true); setErr(null);
+    setBusy(true);
     try {
-      const { blob, w, h } = await compressImage(file);
+      const blob = await compressImage(file);
       const body = new FormData();
       body.append("file", blob, "photo.jpg");
-      const r = await fetch(`/api/photo/${fig.key}`, { method: "POST", body });
+      const r = await fetch(`/api/photo/${log.id}`, { method: "POST", body });
       if (!r.ok) throw new Error(await r.text());
-      toast(`📷 Photo saved (${w}×${h}, ${(blob.size / 1024).toFixed(0)} KB)`);
-      onUploaded();
+      onChanged();
     } catch (e) {
-      setErr("Upload failed: " + e.message);
+      toast("Photo upload failed");
     }
-    setPreview(null);
     setBusy(false);
     if (inputRef.current) inputRef.current.value = "";
   };
 
   const del = async () => {
     setBusy(true);
-    await fetch(`/api/photo/${fig.key}`, { method: "DELETE" });
+    await fetch(`/api/photo/${log.id}`, { method: "DELETE" });
     setBusy(false);
-    onDeleted();
+    onChanged();
   };
 
-  if (hasPhoto) {
-    return html`<div>
-      <label>Your photo</label>
-      <div class="photobox">
-        <img class="photothumb" src="/photos/${fig.key}.jpg" alt="your photo of ${fig.name}"
-          onClick=${() => window.open(`/photos/${fig.key}.jpg`, "_blank")} />
-        <div class="row">
-          <button class="btn secondary" onClick=${() => inputRef.current?.click()} disabled=${busy}>
-            ${busy ? "⏳" : "🔄"} Replace
-          </button>
-          <button class="btn danger" onClick=${del} disabled=${busy}>🗑️ Delete</button>
-        </div>
-      </div>
-      <input ref=${inputRef} type="file" accept="image/*" capture="environment" hidden
-        onChange=${(e) => upload(e.target.files?.[0])} />
-    </div>`;
-  }
-
-  return html`<div>
-    <label>Your photo</label>
-    <div class="photobox empty-photo">
-      ${preview ? html`<img class="photothumb" src=${preview} />` : null}
-      ${err ? html`<div style="color:#e5484d;font-size:12px;margin-bottom:6px">${err}</div>` : null}
-      <button class="btn secondary" onClick=${() => inputRef.current?.click()} disabled=${busy}>
-        ${busy ? "⏳ Uploading…" : "📷 Take / add photo"}
-      </button>
-      <input ref=${inputRef} type="file" accept="image/*" capture="environment" hidden
-        onChange=${(e) => {
-          const f = e.target.files?.[0];
-          if (f) { setPreview(URL.createObjectURL(f)); upload(f); }
-        }} />
-      <div class="hint">Compressed to ~1280px JPEG before saving (~100–300 KB)</div>
-    </div>
+  return html`<div class="photocell">
+    ${log.has_photo ? html`
+      <div class="photothumbwrap">
+        <img class="photothumb" src="/photos/${log.key}-${log.id}.jpg" alt="photo"
+          onClick=${() => window.open(`/photos/${log.key}-${log.id}.jpg`, "_blank")} />
+        <button class="mini" title="Delete photo" onClick=${del} disabled=${busy}><${Icon} name="trash" size=${12} /></button>
+      </div>`
+    : html`<button class="mini photo-add" title="Take photo" onClick=${() => inputRef.current?.click()} disabled=${busy}>
+        <${Icon} name="camera" size=${14} />
+      </button>`}
+    <input ref=${inputRef} type="file" accept="image/*" capture="environment" hidden
+      onChange=${(e) => upload(e.target.files?.[0])} />
   </div>`;
 }
 
 /* --------------------------------------------------------------- modal */
 
-function Detail({ fig, col, hasPhoto, onPhotoChange, onClose, onSave, onClear }) {
-  const [status, setStatus] = useState(col?.status || "");
-  const [count, setCount] = useState(col?.count ?? 1);
-  const [date, setDate] = useState(
-    col?.acquired_date || (col?.status === "owned" ? "" : new Date().toISOString().slice(0, 10))
-  );
-  const [note, setNote] = useState(col?.note || "");
+function Detail({ fig, logs, wishlisted, onClose, onLog, onDelLog, onEditLog, onWish, onPhotoChanged }) {
+  const figLogs = logs || [];
   return html`<div class="overlay" onClick=${onClose}>
     <div class="modal" onClick=${(e) => e.stopPropagation()}>
-      <button class="closex" onClick=${onClose}>✕</button>
-      <div class="mimg">
-        ${fig.image
-          ? html`<img src="/images/${fig.image}" alt=${fig.name} />`
-          : html`<div style="font-size:64px;text-align:center">🫥</div>`}
-        <div style="margin-top:10px">
-          <${PhotoSection} fig=${fig} hasPhoto=${hasPhoto}
-            onUploaded=${onPhotoChange} onDeleted=${onPhotoChange} />
+      <button class="closex" onClick=${onClose}><${Icon} name="x" size=${18} /></button>
+      <div class="mhead">
+        <div class="mimg">
+          ${fig.image
+            ? html`<img src="/images/${fig.image}" alt=${fig.name} />`
+            : html`<div class="placeholder"><${Icon} name="package" size=${48} /></div>`}
         </div>
-      </div>
-      <div class="mbody">
-        <h2>${fig.is_secret ? "✨ " : ""}${fig.name}</h2>
-        <div class="meta">
-          <span class="badge">${fig.series}</span>
-          ${fig.is_secret ? html`<span class="badge secret">SECRET</span>` : null}
-        </div>
-        <div class="meta" style="gap:10px">
-          <${W} v=${fig.avg_boxed} />
-          <${W} v=${fig.avg_unboxed} boxed=${false} />
-          <span style="font-size:11.5px;color:var(--muted)">
-            (${fig.n_boxed || 0} boxed / ${fig.n_unboxed || 0} unboxed data points)
-          </span>
-        </div>
-        ${fig.tip ? html`<div class="tipbox">💡 <b>Tips & tricks:</b>\n${fig.tip}</div>` : null}
-        <div>
-          <label>Status</label>
-          <div class="mode-toggle">
-            ${["owned", "wishlist", ""].map((s) => html`<button
-              class=${status === s ? "active" : ""}
-              onClick=${() => setStatus(s)}>
-              ${s === "owned" ? "✅ Owned" : s === "wishlist" ? "🤍 Wishlist" : "— None —"}
-            </button>`)}
+        <div class="mtitle">
+          <h2>${fig.name}</h2>
+          <div class="meta">
+            <span class="badge">${fig.series}</span>
+            ${fig.is_secret ? html`<span class="badge secret"><${Icon} name="sparkles" size=${11} /> Secret</span>` : null}
           </div>
-        </div>
-        <div class="row">
-          <div style="flex:1">
-            <label>Duplicates (incl. first)</label>
-            <div class="row">
-              <button class="iconbtn" onClick=${() => setCount(Math.max(1, count - 1))}>−</button>
-              <b style="font-size:17px">${count}</b>
-              <button class="iconbtn" onClick=${() => setCount(count + 1)}>+</button>
-            </div>
-          </div>
-          <div style="flex:1">
-            <label>Date acquired</label>
-            <input type="date" value=${date} onInput=${(e) => setDate(e.target.value)} />
-          </div>
-        </div>
-        <div>
-          <label>Note</label>
-          <textarea value=${note} onInput=${(e) => setNote(e.target.value)}
-            placeholder="Where you found it, who picked it, condition…"></textarea>
-        </div>
-        <div class="row" style="justify-content:flex-end">
-          <button class="btn danger" onClick=${() => { onClear(fig.key); onClose(); }}>Remove</button>
-          <button class="btn" onClick=${() => { onSave(fig.key, { status: status || null, count, acquired_date: date || null, note: note || null }); onClose(); }}>
-            Save
+          <button class="heart-toggle ${wishlisted ? "active" : ""}" onClick=${() => onWish(fig.key)}>
+            <${Icon} name="heart" size=${15} /> ${wishlisted ? "Wishlisted" : "Add to wishlist"}
           </button>
         </div>
       </div>
+
+      <div class="mweights">
+        <${W} v=${fig.avg_boxed} label="boxed" />
+        <${W} v=${fig.avg_unboxed} label="unboxed" />
+        <span class="datapts">${fig.n_boxed || 0} / ${fig.n_unboxed || 0} data points</span>
+      </div>
+
+      ${fig.tip ? html`<div class="tipbox">
+        <${Icon} name="lightbulb" size=${14} /> <b>Tips &amp; tricks</b>
+${fig.tip}</div>` : null}
+
+      <div class="logshead">
+        <span>Log <em>(${figLogs.length})</em></span>
+        <button class="btn small" onClick=${() => onLog(fig.key)}>
+          <${Icon} name="plus" size=${14} /> Log one
+        </button>
+      </div>
+      ${figLogs.length === 0
+        ? html`<div class="logs-empty">No copies logged yet</div>`
+        : figLogs.map((log) => html`<div class="logrow" key=${log.id}>
+            <${PhotoControl} log=${log} onChanged=${onPhotoChanged} />
+            <input type="date" class="logdate" value=${log.acquired_date || ""}
+              onChange=${(e) => onEditLog(log.id, { acquired_date: e.target.value })} />
+            <input type="text" class="lognote" placeholder="Note"
+              value=${log.note || ""}
+              onChange=${(e) => onEditLog(log.id, { note: e.target.value })} />
+            <button class="mini danger" title="Delete log" onClick=${() => onDelLog(log.id)}>
+              <${Icon} name="trash" size=${13} />
+            </button>
+          </div>`)}
     </div>
   </div>`;
 }
 
 /* --------------------------------------------------------- catalog page */
 
-function CatalogPage({ state, setState, refresh }) {
+function CatalogPage({ state, refresh }) {
   const [q, setQ] = useState("");
   const [series, setSeries] = useState("All");
   const [tab, setTab] = useState("all");
   const [open, setOpen] = useState(null);
+  const owned = useOwned(state);
 
   const seriesList = useMemo(() => {
-    const seen = new Map();
-    for (const f of state.figures) if (!seen.has(f.series)) seen.set(f.series, 0);
-    for (const f of state.figures)
-      if (state.collection[f.key]?.status === "owned") seen.set(f.series, seen.get(f.series) + 1);
-    return [...seen.keys()];
-  }, [state]);
+    const seen = new Set();
+    for (const f of state.figures) seen.add(f.series);
+    return [...seen];
+  }, [state.figures]);
 
   const figs = useMemo(() => {
     let list = state.figures;
     if (series !== "All") list = list.filter((f) => f.series === series);
-    if (tab === "owned") list = list.filter((f) => state.collection[f.key]?.status === "owned");
-    if (tab === "wishlist") list = list.filter((f) => state.collection[f.key]?.status === "wishlist");
-    if (tab === "missing") list = list.filter((f) => state.collection[f.key]?.status !== "owned");
+    if (tab === "owned") list = list.filter((f) => owned.has(f.key));
+    if (tab === "wishlist") list = list.filter((f) => state.wishlist.has(f.key) && !owned.has(f.key));
+    if (tab === "missing") list = list.filter((f) => !owned.has(f.key));
     if (q.trim()) {
       const n = q.trim().toLowerCase();
       list = list.filter((f) => f.name.toLowerCase().includes(n) || f.series.toLowerCase().includes(n));
     }
     return list;
-  }, [state, q, series, tab]);
+  }, [state, owned, q, series, tab]);
 
-  const onSet = async (key, status) => {
+  const onLog = async (key) => {
     const fig = state.figures.find((f) => f.key === key);
-    if (status === "owned") {
-      const inSeries = state.figures.filter((f) => f.series === fig.series);
-      const othersOwned = inSeries.filter(
-        (f) => f.key !== key && state.collection[f.key]?.status === "owned"
-      ).length;
-      if (inSeries.length > 1 && othersOwned === inSeries.length - 1) {
-        toast(`🎉 ${fig.series} complete!`);
-      }
+    const inSeries = state.figures.filter((f) => f.series === fig.series);
+    const othersOwned = inSeries.filter((f) => f.key !== key && owned.has(f.key)).length;
+    const newCount = (owned.get(key)?.length || 0) + 1;
+    await $fetch("/api/logs", {
+      method: "POST",
+      body: JSON.stringify({ key, acquired_date: new Date().toISOString().slice(0, 10) }),
+    });
+    if (!owned.has(key) && inSeries.length > 1 && othersOwned === inSeries.length - 1) {
+      toast(`${fig.series} complete!`);
+    } else {
+      toast(`${fig.name} logged ×${newCount}`);
     }
-    await $fetch(`/api/collection/${key}`, {
+    refresh();
+  };
+
+  const onWish = async (key) => {
+    const on = !state.wishlist.has(key);
+    await $fetch(`/api/wishlist/${key}`, {
       method: "PUT",
-      body: JSON.stringify({
-        status,
-        count: 1,
-        acquired_date: status === "owned" ? new Date().toISOString().slice(0, 10) : null,
-      }),
+      body: JSON.stringify({ wishlist: on }),
     });
     refresh();
   };
 
-  const onClear = async (key) => {
-    await $fetch(`/api/collection/${key}`, { method: "DELETE" });
+  const onDelLog = async (id) => {
+    await $fetch(`/api/logs/${id}`, { method: "DELETE" });
     refresh();
   };
 
-  const onSave = async (key, body) => {
-    await $fetch(`/api/collection/${key}`, { method: "PUT", body: JSON.stringify(body) });
+  const onEditLog = async (id, body) => {
+    await $fetch(`/api/logs/${id}`, { method: "PATCH", body: JSON.stringify(body) });
     refresh();
-  };
-
-  const onPhotoChange = async () => {
-    const ph = await $fetch("/api/photos");
-    setState((s) => ({ ...s, photos: new Set(ph.keys) }));
   };
 
   return html`<div>
     <div class="controls">
-      <input type="search" placeholder="Search smiskis…" value=${q} onInput=${(e) => setQ(e.target.value)} />
+      <input type="search" placeholder="Search smiskis" value=${q} onInput=${(e) => setQ(e.target.value)} />
       <div class="mode-toggle">
-        ${[["all", "All"], ["owned", "✅ Owned"], ["wishlist", "🤍 Wishlist"], ["missing", "🕳️ Missing"]].map(([k, l]) => html`
+        ${[["all", "All"], ["owned", "Owned"], ["wishlist", "Wishlist"], ["missing", "Missing"]].map(([k, l]) => html`
           <button class=${tab === k ? "active" : ""} onClick=${() => setTab(k)}>${l}</button>`)}
       </div>
     </div>
@@ -379,62 +357,65 @@ function CatalogPage({ state, setState, refresh }) {
         <button class="chip ${series === s ? "active" : ""}" onClick=${() => setSeries(s)}>${s}</button>`)}
     </div>
     ${figs.length === 0
-      ? html`<div class="empty">Nothing here ${tab === "wishlist" ? "— go hunting! 🧭" : "😶‍🌫️"}</div>`
+      ? html`<div class="empty">Nothing here yet</div>`
       : html`<div class="grid">
-          ${figs.map((f) => html`<${Card} key=${f.key} fig=${f} col=${state.collection[f.key]}
-            hasPhoto=${state.photos.has(f.key)}
-            onOpen=${setOpen} onSet=${onSet} onClear=${onClear} />`)}
+          ${figs.map((f) => html`<${Card} key=${f.key} fig=${f}
+            logs=${owned.get(f.key)} wishlisted=${state.wishlist.has(f.key)}
+            onOpen=${setOpen} onLog=${onLog} onWish=${onWish} />`)}
         </div>`}
-    ${open && html`<${Detail} fig=${open} col=${state.collection[open.key]}
-      hasPhoto=${state.photos.has(open.key)} onPhotoChange=${onPhotoChange}
-      onClose=${() => setOpen(null)} onSave=${onSave} onClear=${onClear} />`}
+    ${open && html`<${Detail} fig=${open}
+      logs=${owned.get(open.key)} wishlisted=${state.wishlist.has(open.key)}
+      onClose=${() => setOpen(null)} onLog=${onLog} onDelLog=${onDelLog}
+      onEditLog=${onEditLog} onWish=${onWish} onPhotoChanged=${refresh} />`}
   </div>`;
 }
 
 /* ----------------------------------------------------------- stats page */
 
 function StatsPage({ state }) {
+  const owned = useOwned(state);
   const bySeries = useMemo(() => {
     const m = new Map();
     for (const f of state.figures) {
-      if (!m.has(f.series)) m.set(f.series, { total: 0, owned: 0, wish: 0, secretsTotal: 0, secretsOwned: 0, dupes: 0, photos: 0 });
+      if (!m.has(f.series)) m.set(f.series, { total: 0, owned: 0, copies: 0, secretsTotal: 0, secretsOwned: 0, photos: 0 });
       const s = m.get(f.series);
       s.total++;
       if (f.is_secret) s.secretsTotal++;
-      const c = state.collection[f.key];
-      if (c?.status === "owned") {
+      const logs = owned.get(f.key) || [];
+      if (logs.length) {
         s.owned++;
-        s.dupes += (c.count || 1) - 1;
+        s.copies += logs.length;
         if (f.is_secret) s.secretsOwned++;
+        s.photos += logs.filter((l) => l.has_photo).length;
       }
-      if (c?.status === "wishlist") s.wish++;
-      if (state.photos.has(f.key)) s.photos++;
     }
     return [...m.entries()].sort((a, b) => b[1].owned / b[1].total - a[1].owned / a[1].total);
-  }, [state]);
+  }, [state, owned]);
 
   const total = state.figures.length;
-  const owned = state.figures.filter((f) => state.collection[f.key]?.status === "owned").length;
-  const ownedDupes = bySeries.reduce((a, [, s]) => a + s.dupes, 0);
-  const wish = state.figures.filter((f) => state.collection[f.key]?.status === "wishlist").length;
+  const ownedFigs = owned.size;
+  const totalCopies = state.logs.length;
+  const dupes = totalCopies - ownedFigs;
+  const wish = [...state.wishlist].filter((k) => !owned.has(k)).length;
   const secretsOwned = bySeries.reduce((a, [, s]) => a + s.secretsOwned, 0);
-  const photos = bySeries.reduce((a, [, s]) => a + s.photos, 0);
-  const pct = total ? Math.round((owned / total) * 100) : 0;
+  const photos = state.logs.filter((l) => l.has_photo).length;
+  const pct = total ? Math.round((ownedFigs / total) * 100) : 0;
 
   return html`<div>
     <div class="statgrid">
-      <div class="stat"><div class="v">${owned}<span style="font-size:14px;color:var(--muted)">/${total}</span></div><div class="k">Smiskis collected</div></div>
+      <div class="stat"><div class="v">${ownedFigs}<span class="v-sub">/${total}</span></div><div class="k">Figures collected</div></div>
       <div class="stat"><div class="v">${pct}%</div><div class="k">Overall completion</div></div>
-      <div class="stat"><div class="v">${ownedDupes}</div><div class="k">Duplicates</div></div>
-      <div class="stat"><div class="v">${secretsOwned} ✨</div><div class="k">Secrets found</div></div>
-      <div class="stat"><div class="v">${wish} 🤍</div><div class="k">On the wishlist</div></div>
-      <div class="stat"><div class="v">${photos} 📷</div><div class="k">Photos logged</div></div>
+      <div class="stat"><div class="v">${totalCopies}</div><div class="k">Total copies logged</div></div>
+      <div class="stat"><div class="v">${dupes}</div><div class="k">Duplicates</div></div>
+      <div class="stat"><div class="v">${secretsOwned}</div><div class="k">Secrets found</div></div>
+      <div class="stat"><div class="v">${wish}</div><div class="k">On the wishlist</div></div>
+      <div class="stat"><div class="v">${photos}</div><div class="k">Photos logged</div></div>
     </div>
     ${bySeries.map(([name, s]) => html`
       <div class="srow" key=${name}>
         <div class="top">
           <span>${name}</span>
-          <span class="cnt">${s.owned}/${s.total}${s.secretsTotal ? ` · ✨ ${s.secretsOwned}/${s.secretsTotal}` : ""}${s.wish ? ` · 🤍 ${s.wish}` : ""}${s.photos ? ` · 📷 ${s.photos}` : ""}</span>
+          <span class="cnt">${s.owned}/${s.total}${s.copies > s.owned ? ` · ${s.copies} copies` : ""}${s.secretsTotal ? ` · secret ${s.secretsOwned}/${s.secretsTotal}` : ""}${s.photos ? ` · ${s.photos} photos` : ""}</span>
         </div>
         <div class="bar"><div style="width:${(s.owned / s.total) * 100}%"></div></div>
       </div>`)}
@@ -450,14 +431,16 @@ function TipPop({ fig, pos }) {
     top: Math.min(pos.y + 14, window.innerHeight - 130) + "px",
   };
   return html`<div class="tip-pop" style=${style}>
-    <div class="ttp-head">💡 ${fig.name}${fig.is_secret ? " ✨" : ""}</div>
+    <div class="ttp-head">
+      <${Icon} name="lightbulb" size=${12} /> ${fig.name}${fig.is_secret ? " (secret)" : ""}
+    </div>
     ${fig.tip || "No tips & tricks recorded for this one yet."}
   </div>`;
 }
 
 function FinderPage() {
   const [catalog, setCatalog] = useState(null);
-  const [collection, setCollection] = useState({});
+  const [collection, setCollection] = useState({ logs: [], wishlist: [] });
   const [series, setSeries] = useState("");
   const [weight, setWeight] = useState("");
   const [mode, setMode] = useState("boxed");
@@ -467,11 +450,7 @@ function FinderPage() {
 
   useEffect(() => {
     $fetch("/api/catalog").then(setCatalog);
-    $fetch("/api/collection").then((col) => {
-      const m = {};
-      for (const r of col) m[r.key] = r;
-      setCollection(m);
-    });
+    $fetch("/api/collection").then(setCollection);
   }, []);
 
   const seriesList = useMemo(() => {
@@ -484,6 +463,9 @@ function FinderPage() {
     if (catalog) for (const f of catalog.figures) m.set(f.key, f);
     return m;
   }, [catalog]);
+
+  const ownedKeys = useMemo(() => new Set(collection.logs.map((l) => l.key)), [collection]);
+  const wishKeys = useMemo(() => new Set(collection.wishlist), [collection]);
 
   const run = async () => {
     if (!series || !weight) return;
@@ -510,7 +492,7 @@ function FinderPage() {
       <div class="field">
         <label>Series</label>
         <select value=${series} onChange=${(e) => { setSeries(e.target.value); setResults(null); }}>
-          <option value="">Pick a series…</option>
+          <option value="">Pick a series</option>
           ${seriesList.map((s) => html`<option value=${s} key=${s}>${s}</option>`)}
         </select>
       </div>
@@ -522,32 +504,31 @@ function FinderPage() {
       <div class="field">
         <label>How did you weigh it?</label>
         <div class="mode-toggle">
-          <button class=${mode === "boxed" ? "active" : ""} onClick=${() => setMode("boxed")}>📦 In box</button>
-          <button class=${mode === "unboxed" ? "active" : ""} onClick=${() => setMode("unboxed")}>🧽 Unboxed</button>
+          <button class=${mode === "boxed" ? "active" : ""} onClick=${() => setMode("boxed")}>In box</button>
+          <button class=${mode === "unboxed" ? "active" : ""} onClick=${() => setMode("unboxed")}>Unboxed</button>
         </div>
       </div>
-      <button class="btn" onClick=${run} disabled=${!(series && weight)}>What is it? 🔮</button>
+      <button class="btn" onClick=${run} disabled=${!(series && weight)}>What is it?</button>
     </div>
     ${pack.box ? html`<div class="packnote">
-      Packaging reference from the sheet: box ≈ ${pack.box} g · yellow bag ≈ ${pack.yellow_bag} g ·
+      Packaging reference: box ≈ ${pack.box} g · yellow bag ≈ ${pack.yellow_bag} g ·
       single-series book ≈ ${pack.book_single} g · multi-series book ≈ ${pack.book_multi} g.
-      Community data — weigh responsibly and follow store policies 🫶
+      Community data — weigh responsibly and follow store policies.
     </div>` : null}
 
     ${results ? html`<div class="results" onMouseMove=${onMove} onMouseLeave=${onLeave}>
       ${results.results.map((r, i) => {
         const fig = figByKey.get(r.key);
-        const col = collection[r.key];
         return html`<div class="result ${i === 0 ? "top" : ""}" key=${r.key}
           onMouseEnter=${onHover({ ...r, tip: fig?.tip })}>
           <div class="thumb">
-            ${r.image ? html`<img src="/images/${r.image}" loading="lazy" />` : "🫥"}
+            ${r.image ? html`<img src="/images/${r.image}" loading="lazy" />` : html`<${Icon} name="package" size=${24} />`}
           </div>
           <div class="rbody">
             <div class="rname">
-              ${r.is_secret ? "✨ " : ""}${r.name}
-              ${col?.status === "owned" ? html`<span class="badge">✅ owned</span>` : null}
-              ${col?.status === "wishlist" ? html`<span class="badge">🤍 wishlist</span>` : null}
+              ${r.is_secret ? html`<span class="secret-star"><${Icon} name="sparkles" size=${12} /></span> ` : ""}${r.name}
+              ${ownedKeys.has(r.key) ? html`<span class="badge ok"><${Icon} name="check" size=${11} /> owned</span>` : null}
+              ${wishKeys.has(r.key) ? html`<span class="badge wishb"><${Icon} name="heart" size=${11} /></span>` : null}
             </div>
             <div class="rstats">
               avg ${r.mean} g · ±${r.sd} g · ${r.n} data point${r.n === 1 ? "" : "s"}
@@ -566,12 +547,12 @@ function FinderPage() {
       <div class="packnote">
         Likelihoods use Student-t predictive distributions from community measurements
         (${results.results.reduce((a, r) => a + r.n, 0)} data points in ${series}, ${mode}).
-        Hover a row for tips & tricks 💡
+        Hover a row for tips &amp; tricks.
       </div>
     </div>` : null}
 
     ${series && !results ? html`<div class="packnote">
-      ${figs.length} figures in ${series} — enter a weight and hit the button 🔮
+      ${figs.length} figures in ${series} — enter a weight and hit the button
     </div>` : null}
 
     <${TipPop} fig=${hover?.fig} pos=${hover?.pos} />
@@ -588,28 +569,24 @@ function App() {
     addEventListener("hashchange", fn);
     return () => removeEventListener("hashchange", fn);
   }, []);
-  const [showWeights, toggleWeights] = useShowWeights();
 
   const refresh = useCallback(() => {
     $fetch("/api/collection").then((col) => {
-      const collection = {};
-      for (const row of col) collection[row.key] = row;
-      setState((s) => (s ? { ...s, collection } : s));
+      setState((s) => (s ? { ...s, logs: col.logs, wishlist: new Set(col.wishlist) } : s));
     });
   }, []);
 
-  if (!state) return html`<div class="loading">🧏 Loading Smiski Landia…</div>`;
-  if (state.error) return html`<div class="empty">⚠️ ${state.error}</div>`;
+  if (!state) return html`<div class="loading">Loading Smiski Landia…</div>`;
+  if (state.error) return html`<div class="empty">${state.error}</div>`;
 
   return html`<div>
-    <${Header} route=${route === "/stats" ? "stats" : route === "/finder" ? "finder" : "catalog"}
-      showWeights=${showWeights} toggleWeights=${toggleWeights} />
+    <${Header} route=${route === "/stats" ? "stats" : route === "/finder" ? "finder" : "catalog"} />
     <main>
       ${route === "/stats"
         ? html`<${StatsPage} state=${state} />`
         : route === "/finder"
         ? html`<${FinderPage} />`
-        : html`<${CatalogPage} state=${state} setState=${setState} refresh=${refresh} />`}
+        : html`<${CatalogPage} state=${state} refresh=${refresh} />`}
     </main>
   </div>`;
 }

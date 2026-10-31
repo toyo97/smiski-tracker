@@ -5,11 +5,19 @@ Serves the frontend, the catalog (from the community Google Sheet, via sync.py),
 your shared collection state (SQLite), and the Finder API which scores a
 measured weight against every figure in a series using Student-t predictive
 distributions built from the sheet's raw community measurements.
+
+Data model:
+    catalog   — one row per figure (synced from the sheet)
+    logs      — one row per logged physical copy (count = # of log rows)
+    wishlist  — one row per wishlisted figure
+    meta      — sync metadata
 """
 
 import json
 import math
+import os
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Body, UploadFile, File
@@ -26,12 +34,63 @@ PHOTO_MAX_BYTES = 3 * 1024 * 1024  # client compresses; server-side safety cap
 app = FastAPI(title="Smiski Landia")
 
 
-# ------------------------------------------------------------------ helpers
+# ------------------------------------------------------------------ schema
 
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def init():
+    """Create tables and migrate the legacy single-row `collection` table."""
+    DATA.mkdir(exist_ok=True)
+    conn = db()
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key TEXT NOT NULL,
+            acquired_date TEXT,
+            note TEXT,
+            has_photo INTEGER DEFAULT 0,
+            created_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS wishlist (
+            key TEXT PRIMARY KEY
+        );
+        """
+    )
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )}
+    if "collection" in tables:
+        rows = conn.execute(
+            "SELECT * FROM collection WHERE status IS NOT NULL"
+        ).fetchall()
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        for r in rows:
+            n = max(r["count"] or 1, 1)
+            for i in range(n if r["status"] == "owned" else 0):
+                cur = conn.execute(
+                    "INSERT INTO logs (key, acquired_date, note, has_photo, created_at) VALUES (?,?,?,?,?)",
+                    (r["key"], r["acquired_date"], r["note"] if i == 0 else None, 0, now),
+                )
+                # reattach the old per-figure photo to the first log
+                old_photo = PHOTO_DIR / f"{r['key']}.jpg"
+                if i == 0 and old_photo.exists():
+                    log_id = cur.lastrowid
+                    old_photo.rename(PHOTO_DIR / f"{r['key']}-{log_id}.jpg")
+                    conn.execute("UPDATE logs SET has_photo=1 WHERE id=?", (log_id,))
+            if r["status"] == "wishlist":
+                conn.execute("INSERT OR IGNORE INTO wishlist (key) VALUES (?)", (r["key"],))
+        conn.execute("DROP TABLE collection")
+        print(f"Migrated {len(rows)} legacy collection rows")
+    conn.commit()
+    conn.close()
+
+
+init()
 
 
 def catalog_rows(conn):
@@ -65,13 +124,12 @@ def t_logpdf(t: float, df: int) -> float:
     """Log density of the Student-t distribution at t with df degrees of freedom."""
     if df < 1:
         return -math.inf
-    lg = (
+    return (
         math.lgamma((df + 1) / 2)
         - math.lgamma(df / 2)
         - 0.5 * math.log(df * math.pi)
         - ((df + 1) / 2) * math.log(1 + t * t / df)
     )
-    return lg
 
 
 def stats_from_samples(samples):
@@ -79,10 +137,7 @@ def stats_from_samples(samples):
     if n == 0:
         return None
     mean = sum(samples) / n
-    if n > 1:
-        var = sum((x - mean) ** 2 for x in samples) / (n - 1)
-    else:
-        var = None
+    var = sum((x - mean) ** 2 for x in samples) / (n - 1) if n > 1 else None
     return n, mean, (math.sqrt(var) if var is not None else None)
 
 
@@ -96,13 +151,13 @@ def finder(series: str, weight: float, mode: str):
     col_samples = "samples_boxed" if mode == "boxed" else "samples_unboxed"
     col_avg = "avg_boxed" if mode == "boxed" else "avg_unboxed"
 
-    # pooled sd within this series+mode (fallback: global), for figures with
-    # too few samples to estimate their own spread
+    # pooled sd within this series+mode, for figures with too few samples
+    # to estimate their own spread
     pooled_sds, pooled_n = [], 0
     for r in rows:
         st = stats_from_samples(json.loads(r[col_samples] or "[]"))
         if st and st[2] and st[0] >= 2:
-            pooled_sds.append(st[2] * math.sqrt((st[0] - 1)))
+            pooled_sds.append(st[2] * math.sqrt(st[0] - 1))
             pooled_n += st[0] - 1
     pooled_sd = (
         math.sqrt(sum(x * x for x in pooled_sds) / pooled_n) if pooled_n else 3.0
@@ -111,8 +166,7 @@ def finder(series: str, weight: float, mode: str):
 
     candidates = []
     for r in rows:
-        samples = json.loads(r[col_samples] or "[]")
-        st = stats_from_samples(samples)
+        st = stats_from_samples(json.loads(r[col_samples] or "[]"))
         if st:
             n, mean, sd = st
             sd = sd or pooled_sd
@@ -172,50 +226,122 @@ def api_catalog():
 @app.get("/api/collection")
 def api_collection():
     conn = db()
-    out = [
+    logs = [
         {
-            "key": r["key"], "status": r["status"], "count": r["count"],
-            "acquired_date": r["acquired_date"], "note": r["note"],
+            "id": r["id"], "key": r["key"], "acquired_date": r["acquired_date"],
+            "note": r["note"], "has_photo": bool(r["has_photo"]),
         }
-        for r in conn.execute("SELECT * FROM collection WHERE status IS NOT NULL")
+        for r in conn.execute("SELECT * FROM logs ORDER BY id")
     ]
+    wishlist = [r[0] for r in conn.execute("SELECT key FROM wishlist")]
     conn.close()
-    return out
+    return {"logs": logs, "wishlist": wishlist}
 
 
-@app.put("/api/collection/{key}")
-def api_set(key: str, body: dict = Body(...)):
-    status = body.get("status")
-    if status not in ("owned", "wishlist", None):
-        raise HTTPException(400, "status must be owned, wishlist or null")
+def figure_exists(conn, key: str):
+    return conn.execute("SELECT 1 FROM catalog WHERE key=?", (key,)).fetchone()
+
+
+@app.post("/api/logs")
+def api_log_create(body: dict = Body(...)):
+    key = body.get("key")
     conn = db()
-    if not conn.execute("SELECT 1 FROM catalog WHERE key=?", (key,)).fetchone():
+    if not key or not figure_exists(conn, key):
         conn.close()
         raise HTTPException(404, "unknown figure")
-    conn.execute(
-        """
-        INSERT INTO collection (key, status, count, acquired_date, note, updated_at)
-        VALUES (?, ?, ?, ?, ?, datetime('now'))
-        ON CONFLICT(key) DO UPDATE SET
-            status=excluded.status,
-            count=CASE WHEN excluded.count IS NULL THEN collection.count ELSE excluded.count END,
-            acquired_date=CASE WHEN excluded.acquired_date IS NULL THEN collection.acquired_date ELSE excluded.acquired_date END,
-            note=CASE WHEN excluded.note IS NULL THEN collection.note ELSE excluded.note END,
-            updated_at=excluded.updated_at
-        """,
-        (key, status, body.get("count") or 1, body.get("acquired_date"), body.get("note")),
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    cur = conn.execute(
+        "INSERT INTO logs (key, acquired_date, note, has_photo, created_at) VALUES (?,?,?,0,?)",
+        (key, body.get("acquired_date"), body.get("note"), now),
     )
     conn.commit()
-    row = conn.execute("SELECT * FROM collection WHERE key=?", (key,)).fetchone()
+    row = conn.execute("SELECT * FROM logs WHERE id=?", (cur.lastrowid,)).fetchone()
     conn.close()
     return {k: row[k] for k in row.keys()}
 
 
-@app.delete("/api/collection/{key}")
-def api_delete(key: str):
+@app.patch("/api/logs/{log_id}")
+def api_log_update(log_id: int, body: dict = Body(...)):
     conn = db()
-    conn.execute("DELETE FROM collection WHERE key=?", (key,))
+    row = conn.execute("SELECT * FROM logs WHERE id=?", (log_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "unknown log")
+    conn.execute(
+        "UPDATE logs SET acquired_date=?, note=? WHERE id=?",
+        (body.get("acquired_date", row["acquired_date"]),
+         body.get("note", row["note"]), log_id),
+    )
     conn.commit()
+    row = conn.execute("SELECT * FROM logs WHERE id=?", (log_id,)).fetchone()
+    conn.close()
+    return {k: row[k] for k in row.keys()}
+
+
+@app.delete("/api/logs/{log_id}")
+def api_log_delete(log_id: int):
+    conn = db()
+    row = conn.execute("SELECT * FROM logs WHERE id=?", (log_id,)).fetchone()
+    if row:
+        conn.execute("DELETE FROM logs WHERE id=?", (log_id,))
+        conn.commit()
+        p = PHOTO_DIR / f"{row['key']}-{log_id}.jpg"
+        if p.exists():
+            p.unlink()
+    conn.close()
+    return {"ok": True}
+
+
+@app.put("/api/wishlist/{key}")
+def api_wishlist_set(key: str, body: dict = Body(...)):
+    conn = db()
+    if not figure_exists(conn, key):
+        conn.close()
+        raise HTTPException(404, "unknown figure")
+    if body.get("wishlist"):
+        conn.execute("INSERT OR IGNORE INTO wishlist (key) VALUES (?)", (key,))
+    else:
+        conn.execute("DELETE FROM wishlist WHERE key=?", (key,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+# ----------------------------------------------------------------- photos
+
+PHOTO_MAGIC = (b"\xff\xd8\xff", b"\x89PNG", b"RIFF")  # jpeg / png / webp
+
+
+@app.post("/api/photo/{log_id}")
+async def api_photo_upload(log_id: int, file: UploadFile = File(...)):
+    conn = db()
+    row = conn.execute("SELECT * FROM logs WHERE id=?", (log_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "unknown log")
+    data = await file.read()
+    if len(data) > PHOTO_MAX_BYTES:
+        raise HTTPException(413, "photo too large (compress client-side)")
+    if not data.startswith(PHOTO_MAGIC):
+        raise HTTPException(400, "not a jpeg/png/webp image")
+    PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+    (PHOTO_DIR / f"{row['key']}-{log_id}.jpg").write_bytes(data)
+    conn.execute("UPDATE logs SET has_photo=1 WHERE id=?", (log_id,))
+    conn.commit()
+    conn.close()
+    return {"ok": True, "url": f"/photos/{row['key']}-{log_id}.jpg"}
+
+
+@app.delete("/api/photo/{log_id}")
+def api_photo_delete(log_id: int):
+    conn = db()
+    row = conn.execute("SELECT * FROM logs WHERE id=?", (log_id,)).fetchone()
+    if row:
+        p = PHOTO_DIR / f"{row['key']}-{log_id}.jpg"
+        if p.exists():
+            p.unlink()
+        conn.execute("UPDATE logs SET has_photo=0 WHERE id=?", (log_id,))
+        conn.commit()
     conn.close()
     return {"ok": True}
 
@@ -226,43 +352,6 @@ def api_finder(series: str, weight: float, mode: str = "boxed"):
         raise HTTPException(400, "mode must be boxed or unboxed")
     scored, nodata = finder(series, weight, mode)
     return {"results": scored, "no_data": nodata, "weight": weight, "mode": mode, "series": series}
-
-
-# ----------------------------------------------------------------- photos
-
-PHOTO_MAGIC = (b"\xff\xd8\xff", b"\x89PNG", b"RIFF")  # jpeg / png / webp
-
-
-@app.get("/api/photos")
-def api_photos():
-    if not PHOTO_DIR.exists():
-        return {"keys": []}
-    return {"keys": [p.stem for p in PHOTO_DIR.iterdir() if p.suffix == ".jpg"]}
-
-
-@app.post("/api/photo/{key}")
-async def api_photo_upload(key: str, file: UploadFile = File(...)):
-    conn = db()
-    ok = conn.execute("SELECT 1 FROM catalog WHERE key=?", (key,)).fetchone()
-    conn.close()
-    if not ok:
-        raise HTTPException(404, "unknown figure")
-    data = await file.read()
-    if len(data) > PHOTO_MAX_BYTES:
-        raise HTTPException(413, "photo too large (compress client-side)")
-    if not data.startswith(PHOTO_MAGIC):
-        raise HTTPException(400, "not a jpeg/png/webp image")
-    PHOTO_DIR.mkdir(parents=True, exist_ok=True)
-    (PHOTO_DIR / f"{key}.jpg").write_bytes(data)
-    return {"ok": True, "url": f"/photos/{key}.jpg"}
-
-
-@app.delete("/api/photo/{key}")
-def api_photo_delete(key: str):
-    p = PHOTO_DIR / f"{key}.jpg"
-    if p.exists():
-        p.unlink()
-    return {"ok": True}
 
 
 @app.post("/api/sync")
@@ -288,4 +377,4 @@ def index():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(__import__("os").environ.get("PORT", 8123)))
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8123)))

@@ -329,13 +329,16 @@ def init_db(conn):
             samples_boxed TEXT, samples_unboxed TEXT,
             image TEXT, tip TEXT
         );
-        CREATE TABLE IF NOT EXISTS collection (
-            key TEXT PRIMARY KEY,
-            status TEXT CHECK(status IN ('owned','wishlist')),
-            count INTEGER DEFAULT 1,
+        CREATE TABLE IF NOT EXISTS logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key TEXT NOT NULL,
             acquired_date TEXT,
             note TEXT,
-            updated_at TEXT
+            has_photo INTEGER DEFAULT 0,
+            created_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS wishlist (
+            key TEXT PRIMARY KEY
         );
         CREATE TABLE IF NOT EXISTS meta (
             key TEXT PRIMARY KEY, value TEXT
@@ -399,10 +402,8 @@ def main():
     )
     conn.commit()
     total = conn.execute("SELECT COUNT(*) FROM catalog").fetchone()[0]
-    owned = conn.execute(
-        "SELECT COUNT(*) FROM collection WHERE status='owned'"
-    ).fetchone()[0]
-    print(f"DB ready: {total} figures in catalog, {owned} owned. Sheet updated: {sheet_updated}")
+    owned = conn.execute("SELECT COUNT(*) FROM logs").fetchone()[0]
+    print(f"DB ready: {total} figures in catalog, {owned} logged. Sheet updated: {sheet_updated}")
     conn.close()
 
 
