@@ -122,9 +122,10 @@ function Header({ route }) {
   const doSync = async () => {
     setBusy(true);
     try {
-      await $fetch("/api/sync", { method: "POST" });
-      toast("Sheet re-synced");
-      location.reload();
+      const r = await $fetch("/api/sync", { method: "POST" });
+      toast(`Sheet re-synced — ${r.figures} figures`);
+      setTimeout(() => location.reload(), 900);
+      return;
     } catch (e) { toast("Sync failed: " + e.message); }
     setBusy(false);
   };

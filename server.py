@@ -332,8 +332,11 @@ def api_finder(series: str, weight: float, mode: str = "boxed"):
 @app.post("/api/sync")
 def api_sync():
     import sync
-    sync.main()
-    return {"ok": True}
+    try:
+        total = sync.run(offline=False)
+    except Exception as e:
+        raise HTTPException(502, f"sync failed: {e}")
+    return {"ok": True, "figures": total}
 
 
 # ----------------------------------------------------------------- static

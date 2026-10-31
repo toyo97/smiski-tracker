@@ -371,12 +371,9 @@ def upsert(conn, figures, sheet_updated):
 
 # ---------------------------------------------------------------- main
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--offline", action="store_true", help="reuse data/sheet.xlsx")
-    args = ap.parse_args()
-
-    if not args.offline or not XLSX_PATH.exists():
+def run(offline: bool = False):
+    """Fetch (unless offline) + parse the sheet into the database."""
+    if not offline or not XLSX_PATH.exists():
         download_sheet()
 
     wb = openpyxl.load_workbook(XLSX_PATH, read_only=True, data_only=True)
@@ -405,6 +402,14 @@ def main():
     owned = conn.execute("SELECT COUNT(*) FROM logs").fetchone()[0]
     print(f"DB ready: {total} figures in catalog, {owned} logged. Sheet updated: {sheet_updated}")
     conn.close()
+    return total
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--offline", action="store_true", help="reuse data/sheet.xlsx")
+    args = ap.parse_args()
+    run(offline=args.offline)
 
 
 if __name__ == "__main__":
