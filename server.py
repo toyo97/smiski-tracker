@@ -282,3 +282,9 @@ app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 @app.get("/")
 def index():
     return (ROOT / "static" / "index.html").read_bytes()
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=int(__import__("os").environ.get("PORT", 8123)))

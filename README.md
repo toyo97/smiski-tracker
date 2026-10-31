@@ -1,69 +1,51 @@
 # 🧏 Smiski Landia
 
-A tiny self-hosted collection tracker for Smiski figures, built around the
-community weights Google Sheet (maintained by yunggho on Reddit — thanks! 🙏).
+![Python](https://img.shields.io/badge/python-3.12-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688)
+![Preact](https://img.shields.io/badge/Preact-htm-673ab8)
+![Docker](https://img.shields.io/badge/docker-compose-2496ED)
+![SQLite](https://img.shields.io/badge/SQLite-003B57)
 
-Designed for a home server / VPN: one Docker container, no user accounts, no
-build step, no PHP. Just you and your wife hunting gloomy green boys.
+A tiny self-hosted tracker for **Smiski** blind-box figures. Built for a home
+server / VPN: one Docker container, no accounts, no build step.
 
-## Features
+## ✨ Features
 
-- **Collection catalog** — all ~173 figures across 26 series (incl. secrets),
-  with photos pulled straight from the community sheet
-- **Log & wishlist** — mark owned/wishlist, duplicates count, acquired date,
-  notes; shared state in SQLite so both of you see the same collection
-- **📷 Photos** — take a picture from your phone when logging; it's compressed
-  client-side (max 1280px JPEG, ~100–300 KB) and stored per figure, viewable
-  full-size
-- **🙈 Weight privacy** — weights are hidden by default (like a bank balance);
-  one 👁️ toggle reveals all, or tap any single weight
-- **🔍 Finder** — pick a series, type the weight you measured, get ranked
-  likelihoods computed from the sheet's raw community measurements using
-  Student-t predictive distributions; hover a result for its tips & tricks
-- **📊 Stats** — completion per series, duplicates, secrets found, wishlist
-- **🔄 Sync button** — re-pull the Google Sheet whenever it updates upstream
+- **Collection tracking** — owned / wishlist, duplicates, acquired dates, notes
+- **📷 Photos** — snap a picture from your phone when logging (client-side
+  compressed to ~1280 px JPEG)
+- **🙈 Weight privacy** — community weights hidden by default, tap to reveal
+- **🔍 Finder** — measure a box's weight, get ranked "which one is it?"
+  likelihoods (Student-t predictive distributions from raw community
+  measurements), with identification tips on hover
+- **📊 Stats** — completion per series, secrets, duplicates
+- **🔄 Sheet sync** — re-pull the community spreadsheet on demand
 
-## Run it
+## 🚀 Run
 
 ```bash
-docker compose up -d --build
+docker compose up -d --build        # serves on http://<host>:8123
 ```
 
-Then open `http://<server>:8123` from anywhere on your VPN.
-
-Everything lives in the `./data` volume:
-
-| Path                | What                                     |
-| ------------------- | ---------------------------------------- |
-| `data/app.db`       | SQLite: catalog + your collection        |
-| `data/images/`      | figure photos extracted from the sheet    |
-| `data/photos/`      | your own camera photos                   |
-| `data/sheet.xlsx`   | cached sheet download                    |
-
-### Without Docker
+or without Docker:
 
 ```bash
 pip install -r requirements.txt
-python3 sync.py        # fetch + parse the sheet into data/app.db
-python3 -m uvicorn server:app --port 8123
+python3 sync.py && python3 server.py
 ```
 
-## How it works
+User data lives in `./data` (SQLite db + your photos) — it's the only thing to
+back up. Everything else is regenerated from the sheet by `sync.py`.
 
-- `sync.py` — downloads the sheet's `.xlsx` export, parses the "2. Weights"
-  grid (series blocks), the tidy "6. Data" tab (raw measurements), the
-  "3. Tips + Tricks" tab, and the embedded images (cell-anchored, so each
-  maps to its figure). Upserts into `data/app.db`, never touching your
-  collection state.
-- `server.py` — FastAPI: static frontend, catalog/collection/photos APIs,
-  and `/api/finder` which scores a measured weight against each figure's
-  sample mean/SD/n via a t-predictive density, normalized across the series.
-- `static/` — vanilla Preact + htm (vendored locally, no CDN needed on a VPN)
-  single-page app.
+## 🙏 Acknowledgements
 
-## Data credit
-
-All weights, images, and tips come from the community sheet:
+All weights, figure photos and tips come from the amazing community
+spreadsheet maintained by **u/yunggho** and contributors on r/Smiskis —
+thank you! 🫶
 <https://docs.google.com/spreadsheets/d/1U4l4ugaL8UG7wzEfQqQ1h_oYYX0s0tGpqw9XV_cxnms>
 
-Be mindful of store policies when weighing — the sheet says it best 🫶
+Weigh figures mindfully and follow store policies.
+
+## License
+
+MIT

@@ -1,4 +1,12 @@
+# local data & secrets
 data/
+.env
+*.log
+
+# python
 __pycache__/
 *.pyc
+.venv/
+
+# os
 .DS_Store
