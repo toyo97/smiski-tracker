@@ -62,6 +62,7 @@ const ICONS = {
   lightbulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
   trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
   maximize: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/>',
+  alert: '<path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>',
 };
 
 function Icon({ name, size = 16, class: cls = "" }) {
@@ -84,6 +85,28 @@ function W({ v, label }) {
     ${revealed ? `${v.toFixed(1)} g` : "•••• g"}
     ${revealed ? null : html`<${Icon} name="eye" size=${13} />`}
   </button>`;
+}
+
+function SyncBanner({ meta }) {
+  const orphans = meta?.orphan_logs || [];
+  if (!orphans.length) return null;
+  return html`<div class="banner warn">
+    <${Icon} name="alert" size=${15} />
+    <span>
+      ${orphans.length} logged ${orphans.length === 1 ? "copy is" : "copies are"} no longer
+      matched to a figure in the sheet (the sheet may have renamed it). Your log data is
+      safe in the database.
+    </span>
+  </div>`;
+}
+
+function Footer({ meta }) {
+  if (!meta) return null;
+  return html`<footer class="footer">
+    Smiski Landia v${meta.version || "?"} ·
+    sheet updated ${meta.sheet_updated || "unknown"} ·
+    ${meta.figure_count || 0} figures in ${meta.series_count || 0} series
+  </footer>`;
 }
 
 /* ------------------------------------------------------------- catalog */
@@ -123,10 +146,11 @@ function Header({ route }) {
     setBusy(true);
     try {
       const r = await $fetch("/api/sync", { method: "POST" });
-      toast(`Sheet re-synced — ${r.figures} figures`);
-      setTimeout(() => location.reload(), 900);
+      const warn = r.orphan_logs?.length ? ` (${r.orphan_logs.length} orphaned logs)` : "";
+      toast(`Sheet re-synced — ${r.figures} figures${warn}`);
+      setTimeout(() => location.reload(), 1200);
       return;
-    } catch (e) { toast("Sync failed: " + e.message); }
+    } catch (e) { toast("Sync failed — " + e.message); }
     setBusy(false);
   };
   return html`<header class="topbar">
@@ -345,6 +369,7 @@ function CatalogPage({ state, refresh }) {
   };
 
   return html`<div>
+    <${SyncBanner} meta=${state.meta} />
     <div class="controls">
       <input type="search" placeholder="Search smiskis" value=${q} onInput=${(e) => setQ(e.target.value)} />
       <div class="mode-toggle">
@@ -589,6 +614,7 @@ function App() {
         ? html`<${FinderPage} />`
         : html`<${CatalogPage} state=${state} refresh=${refresh} />`}
     </main>
+    <${Footer} meta=${state.meta} />
   </div>`;
 }
 

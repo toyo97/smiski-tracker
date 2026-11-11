@@ -87,10 +87,30 @@ def catalog_rows(conn):
     ]
 
 
+def orphan_logs(conn):
+    """Logged keys that no longer exist in the catalog (sheet renamed/removed)."""
+    return [
+        r[0]
+        for r in conn.execute(
+            """SELECT DISTINCT l.key FROM logs l
+               LEFT JOIN catalog c ON c.key = l.key
+               WHERE c.key IS NULL ORDER BY l.key"""
+        )
+    ]
+
+
 def meta_dict(conn):
     meta = {r["key"]: r["value"] for r in conn.execute("SELECT * FROM meta")}
     meta["packaging"] = json.loads(meta.get("packaging") or "{}")
+    # always computed live, so it can't go stale after logs change
+    meta["orphan_logs"] = orphan_logs(conn)
+    meta["version"] = read_version()
     return meta
+
+
+def read_version() -> str:
+    vfile = ROOT / "VERSION"
+    return vfile.read_text().strip() if vfile.exists() else "0.0.0"
 
 
 # ------------------------------------------------------------- statistics
@@ -333,10 +353,13 @@ def api_finder(series: str, weight: float, mode: str = "boxed"):
 def api_sync():
     import sync
     try:
-        total = sync.run(offline=False)
+        report = sync.run(offline=False)
+    except sync.SyncError as e:
+        # the previous catalog is untouched; tell the user why we refused
+        raise HTTPException(502, f"sync aborted: {e}")
     except Exception as e:
         raise HTTPException(502, f"sync failed: {e}")
-    return {"ok": True, "figures": total}
+    return {"ok": True, **report}
 
 
 # ----------------------------------------------------------------- static
