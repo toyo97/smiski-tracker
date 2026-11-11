@@ -156,15 +156,20 @@ function Header({ route }) {
   return html`<header class="topbar">
     <div class="logo">Smiski Landia</div>
     <nav class="tabs">
-      <a href="#/" onClick=${go("#/")} class=${route === "catalog" ? "active" : ""}>
-        <${Icon} name="package" size=${15} /> Collection</a>
-      <a href="#/stats" onClick=${go("#/stats")} class=${route === "stats" ? "active" : ""}>
-        <${Icon} name="chart" size=${15} /> Stats</a>
-      <a href="#/finder" onClick=${go("#/finder")} class=${route === "finder" ? "active" : ""}>
-        <${Icon} name="search" size=${15} /> Finder</a>
+      <a href="#/" onClick=${go("#/")} class=${route === "catalog" ? "active" : ""}
+        title="Collection" aria-label="Collection">
+        <${Icon} name="package" size=${15} /><span class="tab-label">Collection</span></a>
+      <a href="#/stats" onClick=${go("#/stats")} class=${route === "stats" ? "active" : ""}
+        title="Stats" aria-label="Stats">
+        <${Icon} name="chart" size=${15} /><span class="tab-label">Stats</span></a>
+      <a href="#/finder" onClick=${go("#/finder")} class=${route === "finder" ? "active" : ""}
+        title="Finder" aria-label="Finder">
+        <${Icon} name="search" size=${15} /><span class="tab-label">Finder</span></a>
     </nav>
-    <button class="iconbtn" onClick=${doSync} disabled=${busy} title="Re-sync the community sheet">
-      <${Icon} name="refresh" size=${15} class=${busy ? "spin" : ""} /> Sync sheet
+    <button class="iconbtn sync" onClick=${doSync} disabled=${busy} title="Re-sync the community sheet"
+      aria-label="Re-sync the community sheet">
+      <${Icon} name="refresh" size=${15} class=${busy ? "spin" : ""} />
+      <span class="sync-label">Sync sheet</span>
     </button>
   </header>`;
 }
@@ -203,7 +208,38 @@ function Card({ fig, logs, wishlisted, onOpen, onLog, onWish }) {
 
 /* ------------------------------------------------------- photo control */
 
-function PhotoControl({ log, onChanged }) {
+function PhotoLightbox({ log, onClose, onDeleted }) {
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const del = async () => {
+    setBusy(true);
+    await fetch(`/api/photo/${log.id}`, { method: "DELETE" });
+    setBusy(false);
+    onDeleted();
+    onClose();
+  };
+
+  return html`<div class="lightbox" onClick=${onClose}>
+    <div class="lb-inner" onClick=${(e) => e.stopPropagation()}>
+      <img src="/photos/${log.key}-${log.id}.jpg" alt="photo of this smiski" />
+      <div class="lb-actions">
+        <button class="btn danger big" onClick=${del} disabled=${busy}>
+          <${Icon} name="trash" size=${17} /> Delete photo
+        </button>
+        <button class="btn secondary big" onClick=${onClose}>
+          <${Icon} name="x" size=${17} /> Close
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function PhotoControl({ log, onOpen, onChanged }) {
   const [busy, setBusy] = useState(false);
   const inputRef = useRef(null);
 
@@ -224,23 +260,14 @@ function PhotoControl({ log, onChanged }) {
     if (inputRef.current) inputRef.current.value = "";
   };
 
-  const del = async () => {
-    setBusy(true);
-    await fetch(`/api/photo/${log.id}`, { method: "DELETE" });
-    setBusy(false);
-    onChanged();
-  };
-
   return html`<div class="photocell">
-    ${log.has_photo ? html`
-      <div class="photothumbwrap">
-        <img class="photothumb" src="/photos/${log.key}-${log.id}.jpg" alt="photo"
-          onClick=${() => window.open(`/photos/${log.key}-${log.id}.jpg`, "_blank")} />
-        <button class="mini" title="Delete photo" onClick=${del} disabled=${busy}><${Icon} name="trash" size=${12} /></button>
-      </div>`
-    : html`<button class="mini photo-add" title="Take photo" onClick=${() => inputRef.current?.click()} disabled=${busy}>
-        <${Icon} name="camera" size=${14} />
-      </button>`}
+    ${log.has_photo
+      ? html`<img class="photothumb" src="/photos/${log.key}-${log.id}.jpg"
+          alt="photo" title="View photo" onClick=${() => onOpen(log)} />`
+      : html`<button class="mini photo-add" title="Take photo"
+          onClick=${() => inputRef.current?.click()} disabled=${busy}>
+          <${Icon} name="camera" size=${15} />
+        </button>`}
     <input ref=${inputRef} type="file" accept="image/*" capture="environment" hidden
       onChange=${(e) => upload(e.target.files?.[0])} />
   </div>`;
@@ -250,6 +277,7 @@ function PhotoControl({ log, onChanged }) {
 
 function Detail({ fig, logs, wishlisted, onClose, onLog, onDelLog, onEditLog, onWish, onPhotoChanged }) {
   const figLogs = logs || [];
+  const [lightbox, setLightbox] = useState(null);
   return html`<div class="overlay" onClick=${onClose}>
     <div class="modal" onClick=${(e) => e.stopPropagation()}>
       <button class="closex" onClick=${onClose}><${Icon} name="x" size=${18} /></button>
@@ -290,17 +318,19 @@ ${fig.tip}</div>` : null}
       ${figLogs.length === 0
         ? html`<div class="logs-empty">No copies logged yet</div>`
         : figLogs.map((log) => html`<div class="logrow" key=${log.id}>
-            <${PhotoControl} log=${log} onChanged=${onPhotoChanged} />
+            <${PhotoControl} log=${log} onOpen=${setLightbox} onChanged=${onPhotoChanged} />
             <input type="date" class="logdate" value=${log.acquired_date || ""}
               onChange=${(e) => onEditLog(log.id, { acquired_date: e.target.value })} />
             <input type="text" class="lognote" placeholder="Note"
               value=${log.note || ""}
               onChange=${(e) => onEditLog(log.id, { note: e.target.value })} />
             <button class="mini danger" title="Delete log" onClick=${() => onDelLog(log.id)}>
-              <${Icon} name="trash" size=${13} />
+              <${Icon} name="trash" size=${14} />
             </button>
           </div>`)}
     </div>
+    ${lightbox && html`<${PhotoLightbox} log=${lightbox}
+      onClose=${() => setLightbox(null)} onDeleted=${onPhotoChanged} />`}
   </div>`;
 }
 

@@ -34,7 +34,6 @@ class SyncSafetyTests(unittest.TestCase):
         self.db = self.tmp / "app.db"
         self.images = self.tmp / "images"
         shutil.copy2(self.real_sheet, self.sheet)
-        shutil.copy2(self.real_db, self.db)
         self.images.mkdir()
 
         sync.XLSX_PATH = self.sheet
@@ -42,7 +41,20 @@ class SyncSafetyTests(unittest.TestCase):
         sync.IMG_DIR = self.images
         sync.DB_BACKUP = self.tmp / "app.db.bak"
 
-        self.baseline = self.catalog_count()
+        # hermetic baseline catalog (independent of any live database), so the
+        # "suspiciously few figures" gate has something realistic to compare to
+        conn = sqlite3.connect(self.db)
+        sync.init_db(conn)
+        for i in range(100):
+            conn.execute(
+                "INSERT INTO catalog VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (i + 1, f"baseline-{i}", "Baseline Series", i, f"Baseline Figure {i}",
+                 0, 40.0, 3, 25.0, 3, "[]", "[]", None, None),
+            )
+        conn.commit()
+        conn.close()
+
+        self.baseline = 100
 
     def tearDown(self):
         sync.XLSX_PATH = self.real_sheet
