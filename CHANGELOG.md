@@ -1,8 +1,17 @@
 # Changelog
 
-All notable changes to Smiski Landia are documented here.
+All notable changes to Smiski Tracker are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Changed
+
+- Project renamed from Smiski Landia to Smiski Tracker: repository name, UI
+  title/logo, FastAPI title, README links and the Docker container name. The
+  GitHub Pages preview moved to
+  <https://toyo97.github.io/smiski-tracker/>.
 
 ## [1.2.0] — 2026-11-11
 

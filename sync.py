@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smiski Landia — ETL sync script.
+"""Smiski Tracker — ETL sync script.
 
 Downloads the community Smiski weights Google Sheet (.xlsx export), parses the
 catalog (series, figures, average weights, raw samples, images, tips), and

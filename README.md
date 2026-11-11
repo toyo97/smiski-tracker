@@ -1,4 +1,4 @@
-# Smiski Landia
+# Smiski Tracker
 
 A tiny self-hosted tracker for Smiski blind-box figures. Built for a home
 server / VPN: one Docker container, no accounts, no build step.
@@ -59,7 +59,7 @@ a warning in the UI.
 ## Try it without installing
 
 A static preview is published to GitHub Pages from `main`:
-**https://toyo97.github.io/smiski-landia/**
+**https://toyo97.github.io/smiski-tracker/**
 
 It is the real interface on generated demo data with no backend — browse, log
 copies, add photos and use the Finder freely; nothing is saved. Build it
