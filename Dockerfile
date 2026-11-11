@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY sync.py server.py ./
+COPY sync.py server.py VERSION ./
 COPY static ./static
 
 # data/ is a volume: app.db, images/, photos/, sheet cache
