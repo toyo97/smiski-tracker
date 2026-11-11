@@ -4,6 +4,32 @@ All notable changes to Smiski Landia are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] — 2026-11-11
+
+### Changed
+
+- **Photos now open in a full-screen viewer instead of a new browser tab.**
+  Tapping a logged photo shows it large over a dimmed background, with big
+  *Delete photo* and *Close* buttons (Escape or tapping outside also closes).
+  The tiny delete button that used to sit on the log thumbnail is gone, so
+  there is no longer a small target to hit on a phone.
+- **The header stays on a single line on narrow screens.** Below 640 px the
+  sync button collapses to just its icon; below 460 px the nav tabs collapse to
+  icons as well. Both keep their accessible labels and tooltips, so nothing is
+  lost for screen readers.
+- Touch targets are larger on phones: log rows, the photo thumbnail and the
+  delete-log button are all easier to tap.
+
+### Fixed
+
+- The photo viewer scales the image up to the viewport (up to 92 vw / 72 vh)
+  instead of displaying small photos at their natural size.
+
+### Changed (internal)
+
+- The sync safety tests now build their own baseline database instead of
+  copying the live one, so they can no longer race with a running instance.
+
 ## [1.1.0] — 2026-11-11
 
 ### Fixed

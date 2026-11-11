@@ -207,15 +207,27 @@ main { max-width: 1080px; margin: 0 auto; padding: 18px 16px 80px; }
 /* ---------- photos ---------- */
 .photocell { flex-shrink: 0; }
 .photo-add { color: var(--blue); }
-.photothumbwrap { position: relative; }
 .photothumb {
-  width: 44px; height: 44px; object-fit: cover; border-radius: 8px;
+  width: 46px; height: 46px; object-fit: cover; border-radius: 8px;
   border: 1px solid var(--line); cursor: zoom-in; display: block;
 }
-.photothumbwrap .mini {
-  position: absolute; top: -7px; right: -7px; width: 20px; height: 20px;
-  border-radius: 999px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+
+/* ---------- photo lightbox ---------- */
+.lightbox {
+  position: fixed; inset: 0; z-index: 400; background: rgba(10, 18, 12, 0.92);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
 }
+.lb-inner {
+  display: flex; flex-direction: column; gap: 14px; align-items: center;
+  max-width: 100%; max-height: 100%;
+}
+.lb-inner img {
+  width: min(92vw, 900px); height: auto; max-height: 72vh; object-fit: contain;
+  border-radius: 14px; background: #111; display: block;
+}
+.lb-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.btn.big { padding: 13px 20px; font-size: 15px; min-height: 48px; }
+.btn.secondary.big { background: rgba(255,255,255,0.92); }
 
 /* ---------- stats ---------- */
 .statgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 22px; }
@@ -298,4 +310,26 @@ main { max-width: 1080px; margin: 0 auto; padding: 18px 16px 80px; }
   .mhead { flex-direction: column; }
   .mimg { width: 120px; }
   .logrow { flex-wrap: wrap; }
+  /* comfortable touch targets on phones */
+  .mini { width: 38px; height: 38px; }
+  .photothumb { width: 40px; height: 40px; }
+  .logrow .logdate { width: 100%; }
+  .lb-inner img { max-height: 62vh; }
+}
+
+/* Narrow viewports: the header would wrap onto two lines, so the sync
+   button collapses to its icon (the title/aria-label keeps it discoverable). */
+@media (max-width: 639px) {
+  .sync-label { display: none; }
+  header.topbar { gap: 8px; padding: 9px 12px; }
+  header.topbar .iconbtn { padding: 7px 10px; }
+  nav.tabs a { padding: 7px 11px; }
+  .logo { font-size: 16px; }
+}
+
+/* Phone widths: tab labels collapse too, so the header stays on one line. */
+@media (max-width: 459px) {
+  .tab-label { display: none; }
+  nav.tabs a { padding: 8px 10px; }
+  .logo { font-size: 15px; }
 }
