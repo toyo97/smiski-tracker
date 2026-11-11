@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smiski Landia — tiny FastAPI server.
+"""Smiski Tracker — tiny FastAPI server.
 
 Serves the frontend, the catalog (from the community Google Sheet, via sync.py),
 your shared collection state (SQLite), and the Finder API which scores a
@@ -31,7 +31,7 @@ IMG_DIR = DATA / "images"
 PHOTO_DIR = DATA / "photos"
 PHOTO_MAX_BYTES = 3 * 1024 * 1024  # client compresses; server-side safety cap
 
-app = FastAPI(title="Smiski Landia")
+app = FastAPI(title="Smiski Tracker")
 
 
 # ------------------------------------------------------------------ schema

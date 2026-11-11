@@ -232,7 +232,7 @@ function SyncBanner({ meta }) {
 function Footer({ meta }) {
   if (!meta) return null;
   return html`<footer class="footer">
-    Smiski Landia v${meta.version || "?"} ·
+    Smiski Tracker v${meta.version || "?"} ·
     sheet updated ${meta.sheet_updated || "unknown"} ·
     ${meta.figure_count || 0} figures in ${meta.series_count || 0} series
   </footer>`;
@@ -290,7 +290,7 @@ function Header({ route }) {
     ? "Syncing isn't available in the static preview"
     : "Re-sync the community sheet";
   return html`<header class="topbar">
-    <div class="logo">Smiski Landia</div>
+    <div class="logo">Smiski Tracker</div>
     <nav class="tabs">
       <a href="#/" onClick=${go("#/")} class=${route === "catalog" ? "active" : ""}
         title="Collection" aria-label="Collection">
@@ -759,7 +759,7 @@ function App() {
     });
   }, []);
 
-  if (!state) return html`<div class="loading">Loading Smiski Landia…</div>`;
+  if (!state) return html`<div class="loading">Loading Smiski Tracker…</div>`;
   if (state.error) return html`<div class="empty">${state.error}</div>`;
 
   return html`<div>

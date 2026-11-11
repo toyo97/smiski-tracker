@@ -1,7 +1,7 @@
 services:
   smiski:
     build: .
-    container_name: smiski-landia
+    container_name: smiski-tracker
     ports:
       - "8123:8123"
     volumes:
