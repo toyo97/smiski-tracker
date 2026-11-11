@@ -1,16 +1,133 @@
 import { h, render } from "preact";
 import { useState, useEffect, useMemo, useRef, useCallback } from "preact/hooks";
 import htm from "./vendor/htm.module.js";
+import { finder } from "./finder.js";
 
 const html = htm.bind(h);
 
 /* ------------------------------------------------------------------ utils */
+
+/** Static preview (GitHub Pages): no backend, nothing is persisted. */
+const DEMO = !!window.SMISKI_DEMO;
 
 const $fetch = (url, opts) =>
   fetch(url, opts ? { headers: { "Content-Type": "application/json" }, ...opts } : undefined).then((r) => {
     if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
     return r.json();
   });
+
+/* ------------------------------------------------- demo (static) backend */
+
+const demo = {
+  figures: [],
+  meta: {},
+  logs: [],
+  wishlist: new Set(),
+  photos: new Map(), // log id -> object URL
+  nextId: 1,
+};
+
+async function demoLoad() {
+  if (demo.figures.length) return { figures: demo.figures, meta: demo.meta };
+  const data = await (await fetch("demo/catalog.json")).json();
+  demo.figures = data.figures;
+  demo.meta = data.meta;
+  return data;
+}
+
+const demoCreateLog = (key, body) => {
+  const log = {
+    id: demo.nextId++,
+    key,
+    acquired_date: body?.acquired_date ?? null,
+    note: body?.note ?? null,
+    has_photo: false,
+  };
+  demo.logs.push(log);
+  return Promise.resolve({ ...log });
+};
+
+/** Photo URLs differ between the real app (/photos/...) and the preview (blob). */
+const photoSrc = (log) =>
+  DEMO ? demo.photos.get(log.id) || "" : `photos/${log.key}-${log.id}.jpg`;
+
+const api = {
+  catalog: () => (DEMO ? demoLoad() : $fetch("api/catalog")),
+  collection: () =>
+    DEMO
+      ? Promise.resolve({
+          logs: demo.logs.map((l) => ({ ...l })),
+          wishlist: [...demo.wishlist],
+        })
+      : $fetch("api/collection"),
+  logCreate: (key, body = {}) =>
+    DEMO
+      ? demoCreateLog(key, body)
+      : $fetch("api/logs", { method: "POST", body: JSON.stringify({ key, ...body }) }),
+  logUpdate: (id, body) =>
+    DEMO
+      ? Promise.resolve(
+          Object.assign(demo.logs.find((l) => l.id === id) || {}, body)
+        )
+      : $fetch(`api/logs/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  logDelete: (id) =>
+    DEMO
+      ? (() => {
+          demo.logs = demo.logs.filter((l) => l.id !== id);
+          const url = demo.photos.get(id);
+          if (url) {
+            URL.revokeObjectURL(url);
+            demo.photos.delete(id);
+          }
+          return Promise.resolve({ ok: true });
+        })()
+      : $fetch(`api/logs/${id}`, { method: "DELETE" }),
+  wishlistSet: (key, on) =>
+    DEMO
+      ? (on ? demo.wishlist.add(key) : demo.wishlist.delete(key), Promise.resolve({ ok: true }))
+      : $fetch(`api/wishlist/${key}`, { method: "PUT", body: JSON.stringify({ wishlist: on }) }),
+  photoUpload: (logId, blob) => {
+    if (DEMO) {
+      const url = URL.createObjectURL(blob);
+      const old = demo.photos.get(logId);
+      if (old) URL.revokeObjectURL(old);
+      demo.photos.set(logId, url);
+      const log = demo.logs.find((l) => l.id === logId);
+      if (log) log.has_photo = true;
+      return Promise.resolve({ ok: true, url });
+    }
+    const body = new FormData();
+    body.append("file", blob, "photo.jpg");
+    return fetch(`api/photo/${logId}`, { method: "POST", body }).then((r) => {
+      if (!r.ok) throw new Error(`${r.status}`);
+      return r.json();
+    });
+  },
+  photoDelete: (logId) => {
+    if (DEMO) {
+      const url = demo.photos.get(logId);
+      if (url) URL.revokeObjectURL(url);
+      demo.photos.delete(logId);
+      const log = demo.logs.find((l) => l.id === logId);
+      if (log) log.has_photo = false;
+      return Promise.resolve({ ok: true });
+    }
+    return fetch(`api/photo/${logId}`, { method: "DELETE" }).then((r) => r.json());
+  },
+  sync: () => {
+    if (DEMO) {
+      return Promise.reject(new Error("this is a static preview — there is nothing to sync"));
+    }
+    return $fetch("api/sync", { method: "POST" });
+  },
+  finder: (series, weight, mode) => {
+    if (DEMO) {
+      const rows = demo.figures.filter((f) => f.series === series);
+      return Promise.resolve({ ...finder(rows, weight, mode), series, weight, mode });
+    }
+    return $fetch(`api/finder?series=${encodeURIComponent(series)}&weight=${weight}&mode=${mode}`);
+  },
+};
 
 let toastTimer = null;
 function toast(msg) {
@@ -87,6 +204,18 @@ function W({ v, label }) {
   </button>`;
 }
 
+function DemoBanner() {
+  if (!DEMO) return null;
+  return html`<div class="banner demo">
+    <${Icon} name="alert" size=${15} />
+    <span>
+      <b>Static preview.</b> This is the real interface running on sample data with no
+      backend — poke around freely, but nothing is saved. Photos you add stay in this
+      browser tab only.
+    </span>
+  </div>`;
+}
+
 function SyncBanner({ meta }) {
   const orphans = meta?.orphan_logs || [];
   if (!orphans.length) return null;
@@ -114,7 +243,7 @@ function Footer({ meta }) {
 function useCatalog() {
   const [state, setState] = useState(null);
   useEffect(() => {
-    Promise.all([$fetch("/api/catalog"), $fetch("/api/collection")])
+    Promise.all([api.catalog(), api.collection()])
       .then(([cat, col]) => {
         setState({ ...cat, logs: col.logs, wishlist: new Set(col.wishlist) });
       })
@@ -143,9 +272,13 @@ function Header({ route }) {
   const [busy, setBusy] = useState(false);
   const go = (r) => (e) => { e.preventDefault(); location.hash = r; };
   const doSync = async () => {
+    if (DEMO) {
+      toast("Syncing isn't available in the static preview");
+      return;
+    }
     setBusy(true);
     try {
-      const r = await $fetch("/api/sync", { method: "POST" });
+      const r = await api.sync();
       const warn = r.orphan_logs?.length ? ` (${r.orphan_logs.length} orphaned logs)` : "";
       toast(`Sheet re-synced — ${r.figures} figures${warn}`);
       setTimeout(() => location.reload(), 1200);
@@ -153,6 +286,9 @@ function Header({ route }) {
     } catch (e) { toast("Sync failed — " + e.message); }
     setBusy(false);
   };
+  const syncTitle = DEMO
+    ? "Syncing isn't available in the static preview"
+    : "Re-sync the community sheet";
   return html`<header class="topbar">
     <div class="logo">Smiski Landia</div>
     <nav class="tabs">
@@ -166,13 +302,12 @@ function Header({ route }) {
         title="Finder" aria-label="Finder">
         <${Icon} name="search" size=${15} /><span class="tab-label">Finder</span></a>
     </nav>
-    <button class="iconbtn sync" onClick=${doSync} disabled=${busy} title="Re-sync the community sheet"
-      aria-label="Re-sync the community sheet">
+    <button class="iconbtn sync" onClick=${doSync} disabled=${busy} title=${syncTitle}
+      aria-label=${syncTitle}>
       <${Icon} name="refresh" size=${15} class=${busy ? "spin" : ""} />
       <span class="sync-label">Sync sheet</span>
     </button>
-  </header>`;
-}
+  </header>`;}
 
 /* --------------------------------------------------------------- card */
 
@@ -181,7 +316,7 @@ function Card({ fig, logs, wishlisted, onOpen, onLog, onWish }) {
   return html`<div class="card ${count ? "owned" : wishlisted ? "wish" : ""}">
     <div class="imgwrap" onClick=${() => onOpen(fig)}>
       ${fig.image
-        ? html`<img src="/images/${fig.image}" alt=${fig.name} loading="lazy" />`
+        ? html`<img src="images/${fig.image}" alt=${fig.name} loading="lazy" />`
         : html`<span class="placeholder"><${Icon} name="package" size=${40} /></span>`}
     </div>
     <h4 onClick=${() => onOpen(fig)}>
@@ -218,15 +353,15 @@ function PhotoLightbox({ log, onClose, onDeleted }) {
 
   const del = async () => {
     setBusy(true);
-    await fetch(`/api/photo/${log.id}`, { method: "DELETE" });
+    await api.photoDelete(log.id);
     setBusy(false);
     onDeleted();
     onClose();
   };
 
-  return html`<div class="lightbox" onClick=${onClose}>
+  return html`<div class="lightbox" onClick=${(e) => { e.stopPropagation(); onClose(); }}>
     <div class="lb-inner" onClick=${(e) => e.stopPropagation()}>
-      <img src="/photos/${log.key}-${log.id}.jpg" alt="photo of this smiski" />
+      <img src=${photoSrc(log)} alt="photo of this smiski" />
       <div class="lb-actions">
         <button class="btn danger big" onClick=${del} disabled=${busy}>
           <${Icon} name="trash" size=${17} /> Delete photo
@@ -248,10 +383,7 @@ function PhotoControl({ log, onOpen, onChanged }) {
     setBusy(true);
     try {
       const blob = await compressImage(file);
-      const body = new FormData();
-      body.append("file", blob, "photo.jpg");
-      const r = await fetch(`/api/photo/${log.id}`, { method: "POST", body });
-      if (!r.ok) throw new Error(await r.text());
+      await api.photoUpload(log.id, blob);
       onChanged();
     } catch (e) {
       toast("Photo upload failed");
@@ -262,7 +394,7 @@ function PhotoControl({ log, onOpen, onChanged }) {
 
   return html`<div class="photocell">
     ${log.has_photo
-      ? html`<img class="photothumb" src="/photos/${log.key}-${log.id}.jpg"
+      ? html`<img class="photothumb" src=${photoSrc(log)}
           alt="photo" title="View photo" onClick=${() => onOpen(log)} />`
       : html`<button class="mini photo-add" title="Take photo"
           onClick=${() => inputRef.current?.click()} disabled=${busy}>
@@ -284,7 +416,7 @@ function Detail({ fig, logs, wishlisted, onClose, onLog, onDelLog, onEditLog, on
       <div class="mhead">
         <div class="mimg">
           ${fig.image
-            ? html`<img src="/images/${fig.image}" alt=${fig.name} />`
+            ? html`<img src="images/${fig.image}" alt=${fig.name} />`
             : html`<div class="placeholder"><${Icon} name="package" size=${48} /></div>`}
         </div>
         <div class="mtitle">
@@ -367,10 +499,7 @@ function CatalogPage({ state, refresh }) {
     const inSeries = state.figures.filter((f) => f.series === fig.series);
     const othersOwned = inSeries.filter((f) => f.key !== key && owned.has(f.key)).length;
     const newCount = (owned.get(key)?.length || 0) + 1;
-    await $fetch("/api/logs", {
-      method: "POST",
-      body: JSON.stringify({ key, acquired_date: new Date().toISOString().slice(0, 10) }),
-    });
+    await api.logCreate(key, { acquired_date: new Date().toISOString().slice(0, 10) });
     if (!owned.has(key) && inSeries.length > 1 && othersOwned === inSeries.length - 1) {
       toast(`${fig.series} complete!`);
     } else {
@@ -381,24 +510,22 @@ function CatalogPage({ state, refresh }) {
 
   const onWish = async (key) => {
     const on = !state.wishlist.has(key);
-    await $fetch(`/api/wishlist/${key}`, {
-      method: "PUT",
-      body: JSON.stringify({ wishlist: on }),
-    });
+    await api.wishlistSet(key, on);
     refresh();
   };
 
   const onDelLog = async (id) => {
-    await $fetch(`/api/logs/${id}`, { method: "DELETE" });
+    await api.logDelete(id);
     refresh();
   };
 
   const onEditLog = async (id, body) => {
-    await $fetch(`/api/logs/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    await api.logUpdate(id, body);
     refresh();
   };
 
   return html`<div>
+    <${DemoBanner} />
     <${SyncBanner} meta=${state.meta} />
     <div class="controls">
       <input type="search" placeholder="Search smiskis" value=${q} onInput=${(e) => setQ(e.target.value)} />
@@ -505,8 +632,8 @@ function FinderPage() {
   const timer = useRef(null);
 
   useEffect(() => {
-    $fetch("/api/catalog").then(setCatalog);
-    $fetch("/api/collection").then(setCollection);
+    api.catalog().then(setCatalog);
+    api.collection().then(setCollection);
   }, []);
 
   const seriesList = useMemo(() => {
@@ -525,7 +652,7 @@ function FinderPage() {
 
   const run = async () => {
     if (!series || !weight) return;
-    const r = await $fetch(`/api/finder?series=${encodeURIComponent(series)}&weight=${weight}&mode=${mode}`);
+    const r = await api.finder(series, weight, mode);
     setResults(r);
   };
 
@@ -578,7 +705,7 @@ function FinderPage() {
         return html`<div class="result ${i === 0 ? "top" : ""}" key=${r.key}
           onMouseEnter=${onHover({ ...r, tip: fig?.tip })}>
           <div class="thumb">
-            ${r.image ? html`<img src="/images/${r.image}" loading="lazy" />` : html`<${Icon} name="package" size=${24} />`}
+            ${r.image ? html`<img src="images/${r.image}" loading="lazy" />` : html`<${Icon} name="package" size=${24} />`}
           </div>
           <div class="rbody">
             <div class="rname">
@@ -627,7 +754,7 @@ function App() {
   }, []);
 
   const refresh = useCallback(() => {
-    $fetch("/api/collection").then((col) => {
+    api.collection().then((col) => {
       setState((s) => (s ? { ...s, logs: col.logs, wishlist: new Set(col.wishlist) } : s));
     });
   }, []);

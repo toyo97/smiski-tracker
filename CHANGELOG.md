@@ -4,6 +4,38 @@ All notable changes to Smiski Landia are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-11-11
+
+### Added
+
+- **Static preview, deployable to GitHub Pages.** The real frontend runs on
+  generated demo data with no backend, so anyone can try it without Docker:
+  browsing, logging copies, the wishlist, photos, stats and the Finder all work,
+  but nothing is saved (photos live in the browser tab) and a banner says so.
+  The sync button is still shown — clicking it explains that syncing isn't
+  available in the static preview.
+- `tools/export_static.py` builds `dist/` — frontend, `demo/catalog.json` and
+  the figure images. `.github/workflows/pages.yml` rebuilds and redeploys it on
+  every push to `main`, so the published preview always matches the main branch
+  and the latest community sheet data.
+- `static/finder.js` — the Finder maths extracted into a shared module so the
+  preview can compute likelihoods in the browser.
+- `tests/test_finder_parity.mjs` — compares the JavaScript and Python Finder
+  implementations (1530 likelihoods across every series: maximum difference
+  0.0000 percentage points).
+
+### Changed
+
+- Frontend asset URLs are now relative, so the app works both at a domain root
+  (Docker) and under a subpath (GitHub Pages project sites).
+- Sync safety tests build their own baseline database, so they can no longer
+  race with a running instance.
+
+### Fixed
+
+- Closing the full-screen photo viewer no longer closes the detail view behind
+  it.
+
 ## [1.1.1] — 2026-11-11
 
 ### Changed

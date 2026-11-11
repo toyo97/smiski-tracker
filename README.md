@@ -56,14 +56,32 @@ backup is written. Your logs and wishlist are never modified by a sync; if a
 figure disappears from the sheet, the orphaned logs are reported and shown as
 a warning in the UI.
 
+## Try it without installing
+
+A static preview is published to GitHub Pages from `main`:
+**https://toyo97.github.io/smiski-landia/**
+
+It is the real interface on generated demo data with no backend — browse, log
+copies, add photos and use the Finder freely; nothing is saved. Build it
+locally with:
+
+```bash
+python3 sync.py && python3 tools/export_static.py   # -> dist/ (open with any static server)
+```
+
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -v
+python3 -m unittest discover -s tests -v            # sync safety (11 tests)
+
+# Finder parity between the JS preview and the Python API:
+python3 tools/export_static.py && python3 -m uvicorn server:app --port 8123 &
+node tests/test_finder_parity.mjs
 ```
 
-Covers the wipe regression, every safety gate, and that collection data
-survives syncs. Requires a cached sheet (`python3 sync.py` once).
+Covers the wipe regression, every sync safety gate, that collection data
+survives syncs, and that the preview's likelihoods match the server's. Requires
+a cached sheet (`python3 sync.py` once).
 
 ## Acknowledgements
 

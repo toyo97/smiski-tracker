@@ -10,3 +10,6 @@ __pycache__/
 
 # os
 .DS_Store
+
+# static preview build output
+dist/
